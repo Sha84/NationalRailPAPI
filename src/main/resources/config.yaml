@@ -1,9 +1,12 @@
 delay:
   port: "8083"
   protocol: "HTTP"
-  host: "0.0.0.0"
+  host: "localhost"
   
 sfds:
   port: "8090"
   protocol: "HTTP"
   host: "0.0.0.0"  
+  
+
+    

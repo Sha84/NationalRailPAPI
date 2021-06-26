@@ -16,7 +16,7 @@ http://www.mulesoft.org/schema/mule/my-train-customer-sapi http://www.mulesoft.o
 		</vm:queues>
 	</vm:config>
 	<json-logger:config name="JSON_Logger_Config" doc:name="JSON Logger Config" doc:id="c52bec58-d260-4d7f-be2f-e78e9fb36ae4" environment="dev" applicationName="nationalrail-papi" applicationVersion="1.0"/>
-	<delay-sapi:config name="Delay_SAPI_Config" doc:name="Delay-SAPI Config" doc:id="74adf6fb-39e2-44a6-b682-bd12b852859b" property_host="localhost" property_port="${delay.port}" property_protocol="HTTP" property_basePath="/api/" property_responseTimeout="10000000" />
+	<delay-sapi:config name="Delay_SAPI_Config" doc:name="Delay-SAPI Config" doc:id="74adf6fb-39e2-44a6-b682-bd12b852859b" property_host="${delay.host}" property_port="${delay.port}" property_protocol="${delay.protocol}" property_basePath="/api/" property_responseTimeout="10000000" />
 	<db:config name="Database_Config" doc:name="Database Config" doc:id="455368c8-9d79-41c1-a836-b8176924ad90" >
 		<db:my-sql-connection host="64.227.37.97" port="3306" user="njclabs" password="training" database="nrs" />
 	</db:config>
