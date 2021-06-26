@@ -1,0 +1,188 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:my-train-customer-sapi="http://www.mulesoft.org/schema/mule/my-train-customer-sapi" xmlns:db="http://www.mulesoft.org/schema/mule/db"
+	xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
+	xmlns:delay-sapi="http://www.mulesoft.org/schema/mule/delay-sapi" xmlns:json-logger="http://www.mulesoft.org/schema/mule/json-logger" xmlns:vm="http://www.mulesoft.org/schema/mule/vm" xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/vm http://www.mulesoft.org/schema/mule/vm/current/mule-vm.xsd
+http://www.mulesoft.org/schema/mule/json-logger http://www.mulesoft.org/schema/mule/json-logger/current/mule-json-logger.xsd
+http://www.mulesoft.org/schema/mule/delay-sapi http://www.mulesoft.org/schema/mule/delay-sapi/current/mule-delay-sapi.xsd
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd
+http://www.mulesoft.org/schema/mule/db http://www.mulesoft.org/schema/mule/db/current/mule-db.xsd
+http://www.mulesoft.org/schema/mule/my-train-customer-sapi http://www.mulesoft.org/schema/mule/my-train-customer-sapi/current/mule-my-train-customer-sapi.xsd">
+	<vm:config name="VM_Config" doc:name="VM Config" doc:id="8f513be1-c1e3-4562-af86-f1303cee540b">
+		<vm:queues >
+			<vm:queue queueName="DelayNotify" />
+			<vm:queue queueName="sfdc" />
+		</vm:queues>
+	</vm:config>
+	<json-logger:config name="JSON_Logger_Config" doc:name="JSON Logger Config" doc:id="c52bec58-d260-4d7f-be2f-e78e9fb36ae4" environment="dev" applicationName="nationalrail-papi" applicationVersion="1.0"/>
+	<delay-sapi:config name="Delay_SAPI_Config" doc:name="Delay-SAPI Config" doc:id="74adf6fb-39e2-44a6-b682-bd12b852859b" property_host="localhost" property_port="${delay.port}" property_protocol="HTTP" property_basePath="/api/" property_responseTimeout="10000000" />
+	<db:config name="Database_Config" doc:name="Database Config" doc:id="455368c8-9d79-41c1-a836-b8176924ad90" >
+		<db:my-sql-connection host="64.227.37.97" port="3306" user="njclabs" password="training" database="nrs" />
+	</db:config>
+	<my-train-customer-sapi:config name="My_Train_Customer_SAPI_Config" doc:name="My-Train-Customer-SAPI Config" doc:id="8282ad0a-ce39-4d41-bc18-899b591f8ddf" property_host="localhost" property_protocol="HTTP" property_basePath="/api/" property_port="${sfds.port}" property_responseTimeout="10000000"/>
+	<configuration-properties doc:name="Configuration properties" doc:id="92852208-ff97-49c9-b395-a6a50079bcce" file="config.yaml" />
+	<flow name="nationalrail-papiFlow" doc:id="40333dd0-92b6-4dec-98c2-1e2c1b364785" >
+		<vm:listener doc:name="Listener" doc:id="a3219b48-3bbd-4f87-aca1-b09369fa14a2" config-ref="VM_Config" timeout="5000000" queueName="DelayNotify"/>
+		<json-logger:logger doc:name="Logger" doc:id="d00587d0-1b94-4c7b-b918-33d92969531c" config-ref="JSON_Logger_Config" message="Delay Retrieval Started"/>
+		<delay-sapi:get-delays doc:name="Get delays" doc:id="eeea3341-91a3-4805-b79e-9c4688f1898f" config-ref="Delay_SAPI_Config" />
+		<json-logger:logger doc:name="Logger" doc:id="1b693a71-7cbc-4547-868b-278072e09414" config-ref="JSON_Logger_Config" message="check"/>
+		<foreach doc:name="For Each" doc:id="682d0895-ccba-4f67-be9e-b73069d0f10f" >
+			<ee:transform doc:name="Transform Message" doc:id="8c88fffe-89eb-4424-874f-08b54f393f55" >
+				<ee:message >
+				</ee:message>
+				<ee:variables >
+					<ee:set-variable variableName="custData" ><![CDATA[%dw 2.0
+output application/json
+---
+{
+	"subscriptionId":payload.subscription_id,
+	"customerId":payload.customer_id,
+	"customerEmail":payload.email_id,
+	"fromStation":payload.from_station,
+	"toStation":payload.to_station,
+	"advanceNotifyTime":payload.advance_notify_time,
+	"customerId":payload.customer_id,
+	"statusTypeId":payload.status_type_id	
+}]]></ee:set-variable>
+				</ee:variables>
+			</ee:transform>
+			<try doc:name="Try" doc:id="1b011192-da69-41a6-b6f6-8df4d722b65f" >
+				<delay-sapi:create-consume-soap doc:name="Create consume soap" doc:id="88dacc61-b112-4b9b-b9d5-6f5e946f9191" config-ref="Delay_SAPI_Config" />
+				<error-handler >
+					<on-error-continue enableNotifications="true" logException="true" doc:name="On Error Continue" doc:id="f3a1e00a-00f7-4131-a9dc-c33fc0236f0d" type="DELAY-SAPI:BAD_REQUEST, DELAY-SAPI:CONNECTIVITY, DELAY-SAPI:FORBIDDEN, DELAY-SAPI:INTERNAL_SERVER_ERROR, DELAY-SAPI:METHOD_NOT_ALLOWED, DELAY-SAPI:NOT_ACCEPTABLE">
+						<ee:transform doc:name="Transform Message" doc:id="1f0c93b6-2028-4c4d-91e1-031adbef82e5" >
+							<ee:message >
+								<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+{
+	description:error.detailedDescription
+}]]></ee:set-payload>
+							</ee:message>
+						</ee:transform>
+						<json-logger:logger doc:name="Logger" doc:id="790a722b-5c35-4aba-85ab-4e1f595d1710" config-ref="JSON_Logger_Config" message="error in consume soapin delay sapi"/>
+					</on-error-continue>
+				</error-handler>
+			</try>
+			<flow-ref doc:name="Flow Reference" doc:id="11f367a1-1465-422e-842c-764224d8fe0e" name="NRcheckDelayCancelFlow"/>
+		</foreach>
+		<error-handler >
+			<on-error-continue enableNotifications="true" logException="true" doc:name="On Error Continue" doc:id="914e14ab-a0e9-4f19-9164-499aa5848aff" type="DB:BAD_SQL_SYNTAX, DB:CONNECTIVITY, DB:QUERY_EXECUTION, DB:RETRY_EXHAUSTED, DELAY-SAPI:BAD_REQUEST, DELAY-SAPI:CONNECTIVITY">
+				<ee:transform doc:name="Transform Message" doc:id="51def83f-6776-4d8f-a53e-c5d59c41ac6f" >
+					<ee:message >
+						<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+{
+	description:error.detailedDescription
+}]]></ee:set-payload>
+					</ee:message>
+				</ee:transform>
+			</on-error-continue>
+		</error-handler>
+	</flow>
+	<flow name="defchoiceFlow" doc:id="9b089f88-c749-48a5-89d0-876261de5eb0" >
+		<json-logger:logger doc:name="Logger" doc:id="4ffd304e-9d31-4bee-ad19-da6610a845ac" config-ref="JSON_Logger_Config" message="DEFAULT CHOICE LOGGER"/>
+	</flow>
+	<flow name="oNTimeFlow" doc:id="559d30c9-8d04-4c28-8c9f-bb40b45335ff" >
+		<json-logger:logger doc:name="Logger" doc:id="62e252a7-4d66-4b18-9955-282c60becc1e" config-ref="JSON_Logger_Config" message="Train On TIME"/>
+	</flow>
+	<flow name="NRcheckDelayCancelFlow" doc:id="6c5166b8-4246-4225-afad-f283bbefe5db" >
+		<json-logger:logger doc:name="Copy_of_Logger" doc:id="3a69148d-8e91-453d-b800-b4282bfbea60" config-ref="JSON_Logger_Config" message="CheckFlowStarted" />
+		<ee:transform doc:name="Copy_of_Transform Message" doc:id="39d41494-2a2b-477c-9d7e-74227d3b53f2" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+	
+payload.trainServices map (item,index)->{
+	 
+	  "std": item.std,
+      "etd": item.etd,
+      "operator": item.operator,
+      "operatorCode": item.operatorCode,
+      "serviceType": item.serviceType,
+      "serviceId":item.serviceID
+	}]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<foreach doc:name="choiceFor Each" doc:id="fdb53412-9dff-49d5-9e1e-7426d8c66873" >
+			<choice doc:name="Copy_of_Choice" doc:id="7e32f866-5974-4b58-b49f-bbf1974217d8" >
+				<when expression='#[payload.etd =="On time"]' >
+					<flow-ref doc:name="Copy_of_Flow Reference" doc:id="78c8ef60-4eda-4bc9-98f9-0d4567cf8e28" name="oNTimeFlow" />
+				</when>
+				<when expression='#[payload.etd =="Cancelled" or payload.etd =="Delayed"]'>
+					<flow-ref doc:name="Flow Reference" doc:id="87f38065-14db-4e11-8edd-0d4de28bf2de" name="NRalertTableInsertandEmailNotifyFlow"/>
+				</when>
+				<otherwise >
+					<flow-ref doc:name="Flow Reference" doc:id="f475b14f-2f04-486e-90bd-1ac6ac1f67b2" name="defchoiceFlow" />
+				</otherwise>
+			</choice>
+		</foreach>
+	</flow>
+	<flow name="nationalrail-papiFlow1" doc:id="fde15736-351f-4db4-bcda-1e981ee0d45a">
+		<scheduler doc:name="Scheduler-Every-30 minutes" doc:id="4e481755-e46b-4614-8650-38666ffdbe0e" >
+			<scheduling-strategy >
+				<fixed-frequency frequency="30" timeUnit="MINUTES"/>
+			</scheduling-strategy>
+		</scheduler>
+		<vm:publish doc:name="Publish" doc:id="16e59e9d-92d0-49c2-8a48-353ff0447fec" config-ref="VM_Config" queueName="DelayNotify" timeout="50000000"/>
+		<json-logger:logger doc:name="Logger" doc:id="985374ed-8da4-4d6c-b2df-c121bf7b1a22" config-ref="JSON_Logger_Config" message="Papi end Logger"/>
+	</flow>
+	<flow name="NRalertTableInsertandEmailNotifyFlow" doc:id="758375cc-b8e6-457f-b941-9c5c0277032d" >
+		<json-logger:logger doc:name="Logger" doc:id="1d73a655-902d-4d28-8aef-b38bc0077483" config-ref="JSON_Logger_Config" message="alertInsertflow Started" />
+		<ee:transform doc:name="Copy_of_Transform Message" doc:id="a04889e7-d2b3-4be5-954f-6bfaf0ee7310" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[output application/json
+---
+[{
+
+  "subscription_id" :vars.custData.subscriptionId,
+  "email_id"  : vars.custData.customerEmail,
+  "email_notify": "No",
+  "origin_location": vars.custData.fromStation,
+  "destination_location":vars.custData.toStation,
+  "service_type":payload.serviceType,
+  "service_id":payload.serviceId,
+  "delay_status": payload.etd,
+  "delay_time":12,
+  "train_delay_reason":payload.cancelReason,
+  "status_type_id":  vars.custData.statusTypeId,
+  "creationDate?": "2021-09-03",
+  "createdBy?": "admin",           
+  "lastUpdatedDate?":"2021-09-03",
+  "lastUpdatedBy?":  "admin"
+}]]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<db:stored-procedure doc:id="54b51799-3df0-4c69-a344-472a801a8b1b" config-ref="Database_Config" target="alertpayload" doc:name="Stored procedure" >
+			<db:sql ><![CDATA[{Call createAlertDetails (:subscriptionId,:emailId,:originLocation,:destinationLocation,:serviceType,:serviceId,:delayStatus,:delayTime,:trainDelayReason,:alertId)}
+
+]]></db:sql>
+			<db:input-parameters ><![CDATA[#[{
+	"subscriptionId":payload[0].subscription_id,
+	"emailId":payload[0].email_id,
+	"originLocation":payload[0].origin_location,
+	"destinationLocation":payload[0].destination_location,
+	"serviceType":payload[0].service_type,
+	"serviceId":payload[0].service_id,
+	"trainDelayReason":payload[0].train_delay_reason,
+	"delayStatus":payload[0].delay_status,
+	"delayTime":payload[0].delay_time
+	}]]]></db:input-parameters>
+			<db:output-parameters >
+				<db:output-parameter key="alertId" type="INTEGER" />
+			</db:output-parameters>
+		</db:stored-procedure>
+		<delay-sapi:create-email doc:name="Create email" doc:id="44eeda96-835f-4ff8-9ada-1f50a7e54937" config-ref="Delay_SAPI_Config" />
+		<db:update doc:id="3c48279d-d40f-4850-b6b8-2a3cc9384a99" config-ref="Database_Config" doc:name="Update" >
+			<db:sql ><![CDATA[UPDATE nrs.xxtrain_alert_details 
+SET email_notify ="Notified" WHERE alert_id=:alert_id]]></db:sql>
+			<db:input-parameters ><![CDATA[#[{
+"alert_id":vars.alertpayload.alertId
+
+}]]]></db:input-parameters>
+		</db:update>
+	</flow>
+</mule>
